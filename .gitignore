@@ -1,0 +1,23 @@
+## Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Re]leases/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+bin/
+obj/
+out/
+
+## Visual Studio cache/options
+.vs/
+.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## OS metadata
+.DS_Store
+Thumbs.db
