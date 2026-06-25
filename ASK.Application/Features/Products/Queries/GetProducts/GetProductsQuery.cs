@@ -11,6 +11,7 @@ public record GetProductsQuery(
     int? BrandId,
     bool? IsNew,
     bool? IsFeatured,
+    bool? IsDealOfTheDay,
     bool? InStockOnly,
     string? Search,
     int Page = 1,
@@ -25,7 +26,7 @@ public class GetProductsQueryHandler(IUnitOfWork unitOfWork)
         GetProductsQuery request, CancellationToken cancellationToken)
     {
         var (items, total) = await unitOfWork.Products.GetPagedAsync(
-            request.CategoryId, request.BrandId, request.IsNew, request.IsFeatured, request.InStockOnly,
+            request.CategoryId, request.BrandId, request.IsNew, request.IsFeatured, request.IsDealOfTheDay, request.InStockOnly,
             request.Search, request.Page, request.Limit, request.ActiveOnly, cancellationToken);
 
         var dtos = items.Select(MapToDto).ToList();
@@ -38,7 +39,7 @@ public class GetProductsQueryHandler(IUnitOfWork unitOfWork)
         JsonSerializer.Deserialize<List<string>>(p.FeaturesJson) ?? [],
         JsonSerializer.Deserialize<Dictionary<string, string>>(p.SpecificationsJson) ?? [],
         p.Stock, p.Price, p.DiscountedPrice, p.Discount, p.TaxRate, p.Currency,
-        p.IsNew, p.IsFeatured, p.Status,
+        p.IsNew, p.IsFeatured, p.IsDealOfTheDay, p.Status,
         p.CategoryId, p.Category?.Name ?? string.Empty,
         p.BrandId, p.Brand?.Name ?? string.Empty
     );

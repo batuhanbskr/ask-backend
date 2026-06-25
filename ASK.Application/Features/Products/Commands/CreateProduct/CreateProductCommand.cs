@@ -50,6 +50,7 @@ public class CreateProductCommandHandler(IUnitOfWork unitOfWork)
             Currency = dto.Currency,
             IsNew = dto.IsNew,
             IsFeatured = dto.IsFeatured,
+            IsDealOfTheDay = dto.IsDealOfTheDay,
             CategoryId = dto.CategoryId,
             BrandId = dto.BrandId,
             SupplierLink = dto.SupplierLink,

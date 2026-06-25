@@ -21,6 +21,7 @@ public record ProductDto(
     string Currency,
     bool IsNew,
     bool IsFeatured,
+    bool IsDealOfTheDay,
     int Status,
     int CategoryId,
     string CategoryName,
@@ -49,6 +50,7 @@ public record CreateProductDto(
     string Currency,
     bool IsNew,
     bool IsFeatured,
+    bool IsDealOfTheDay,
     int CategoryId,
     int BrandId,
     string? SupplierLink
@@ -74,6 +76,7 @@ public record UpdateProductDto(
     string Currency,
     bool IsNew,
     bool IsFeatured,
+    bool IsDealOfTheDay,
     int Status = 1,
     int CategoryId = 0,
     int BrandId = 0,

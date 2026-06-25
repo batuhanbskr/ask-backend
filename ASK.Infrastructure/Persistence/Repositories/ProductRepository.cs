@@ -14,7 +14,7 @@ public class ProductRepository(AppDbContext context) : Repository<Product>(conte
             .FirstOrDefaultAsync(p => p.Slug == slug && p.Status == 1, cancellationToken);
 
     public async Task<(IReadOnlyList<Product> Items, int Total)> GetPagedAsync(
-        int? categoryId, int? brandId, bool? isNew, bool? isFeatured, bool? inStockOnly,
+        int? categoryId, int? brandId, bool? isNew, bool? isFeatured, bool? isDealOfTheDay, bool? inStockOnly,
         string? search, int page, int limit, bool activeOnly = true, CancellationToken cancellationToken = default)
     {
         var query = DbSet
@@ -57,6 +57,9 @@ public class ProductRepository(AppDbContext context) : Repository<Product>(conte
 
         if (isFeatured.HasValue)
             query = query.Where(p => p.IsFeatured == isFeatured.Value);
+
+        if (isDealOfTheDay.HasValue)
+            query = query.Where(p => p.IsDealOfTheDay == isDealOfTheDay.Value);
 
         if (inStockOnly.HasValue && inStockOnly.Value)
             query = query.Where(p => p.Stock > 0);

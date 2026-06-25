@@ -74,6 +74,9 @@ public class Product : BaseEntity
     /// <summary>Öne çıkan ürün bayrağı (anasayfada gösterilir).</summary>
     public bool IsFeatured { get; set; }
 
+    /// <summary>Günün Fırsatı ürün bayrağı.</summary>
+    public bool IsDealOfTheDay { get; set; }
+
     /// <summary>Tedarikçi ürün linki.</summary>
     public string? SupplierLink { get; set; }
 

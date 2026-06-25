@@ -93,13 +93,13 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
     [HttpGet("products")]
     public async Task<IActionResult> GetProducts(
         [FromQuery] int? categoryId, [FromQuery] int? brandId,
-        [FromQuery] bool? isNew, [FromQuery] bool? isFeatured,
+        [FromQuery] bool? isNew, [FromQuery] bool? isFeatured, [FromQuery] bool? isDealOfTheDay,
         [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int limit = 20,
         CancellationToken ct = default)
     {
         limit = Math.Clamp(limit, 1, 100);
         var result = await mediator.Send(
-            new GetProductsQuery(categoryId, brandId, isNew, isFeatured, null, search, page, limit, ActiveOnly: false), ct);
+            new GetProductsQuery(categoryId, brandId, isNew, isFeatured, isDealOfTheDay, null, search, page, limit, ActiveOnly: false), ct);
         return Ok(result);
     }
 

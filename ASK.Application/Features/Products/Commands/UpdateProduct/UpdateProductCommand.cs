@@ -42,6 +42,7 @@ public class UpdateProductCommandHandler(IUnitOfWork unitOfWork)
         product.Currency = dto.Currency;
         product.IsNew = dto.IsNew;
         product.IsFeatured = dto.IsFeatured;
+        product.IsDealOfTheDay = dto.IsDealOfTheDay;
         product.Status = dto.Status;
         product.CategoryId = dto.CategoryId;
         product.BrandId = dto.BrandId;
