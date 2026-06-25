@@ -34,6 +34,7 @@ public class CartRepository(AppDbContext context) : Repository<Cart>(context), I
 {
     public async Task<Cart?> GetByUserIdWithItemsAsync(int userId, CancellationToken cancellationToken = default) =>
         await DbSet
+            .Include(c => c.User)
             .Include(c => c.CartItems)
                 .ThenInclude(ci => ci.Product)
             .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);

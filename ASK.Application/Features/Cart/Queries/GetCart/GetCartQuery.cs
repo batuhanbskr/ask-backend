@@ -27,16 +27,33 @@ public class GetCartQueryHandler(IUnitOfWork unitOfWork)
 
     internal static CartDto MapToDto(Domain.Entities.Cart cart)
     {
-        var items = cart.CartItems.Select(ci => new CartItemDto(
-            ci.Id,
-            ci.ProductId,
-            ci.Product?.Name ?? string.Empty,
-            ci.Product?.ImageUrl,
-            ci.Product?.Price ?? 0,
-            ci.Product?.DiscountedPrice ?? 0,
-            ci.Quantity,
-            (ci.Product?.DiscountedPrice ?? 0) * ci.Quantity
-        )).ToList();
+        var globalDiscountRate = cart.User?.GlobalDiscountRate ?? 0;
+
+        var items = cart.CartItems.Select(ci => {
+            var price = ci.Product?.Price ?? 0;
+            var discountedPrice = ci.Product?.DiscountedPrice ?? 0;
+
+            if (discountedPrice <= 0 || discountedPrice > price)
+            {
+                discountedPrice = price;
+            }
+
+            if (globalDiscountRate > 0)
+            {
+                discountedPrice = discountedPrice * (1 - globalDiscountRate / 100);
+            }
+
+            return new CartItemDto(
+                ci.Id,
+                ci.ProductId,
+                ci.Product?.Name ?? string.Empty,
+                ci.Product?.ImageUrl,
+                price,
+                discountedPrice,
+                ci.Quantity,
+                discountedPrice * ci.Quantity
+            );
+        }).ToList();
 
         return new CartDto(
             cart.Id,

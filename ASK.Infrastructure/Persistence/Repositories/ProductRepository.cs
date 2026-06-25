@@ -70,7 +70,8 @@ public class ProductRepository(AppDbContext context) : Repository<Product>(conte
             query = query.Where(p =>
                 p.Name.ToLower().Contains(q) ||
                 p.Code.ToLower().Contains(q) ||
-                (p.Barcode != null && p.Barcode.Contains(q)));
+                (p.Barcode != null && p.Barcode.Contains(q)) ||
+                (p.Category != null && p.Category.Name.ToLower().Contains(q)));
         }
 
         var total = await query.CountAsync(cancellationToken);

@@ -34,9 +34,27 @@ public class UpdateProductCommandHandler(IUnitOfWork unitOfWork)
         product.FeaturesJson = JsonSerializer.Serialize(dto.Features);
         product.SpecificationsJson = JsonSerializer.Serialize(dto.Specifications);
         product.Stock = dto.Stock;
-        product.Price = dto.Price;
-        product.DiscountedPrice = dto.DiscountedPrice;
-        product.Discount = dto.Discount;
+        var price = dto.Price;
+        var discount = dto.Discount;
+        var discountedPrice = dto.DiscountedPrice;
+
+        if (discount > 0 && (discountedPrice <= 0 || discountedPrice == price))
+        {
+            discountedPrice = price * (1 - discount / 100);
+        }
+        else if (discountedPrice > 0 && discountedPrice < price && discount <= 0)
+        {
+            discount = Math.Round((1 - (discountedPrice / price)) * 100, 2);
+        }
+        else if (discountedPrice <= 0 || discountedPrice > price)
+        {
+            discountedPrice = price;
+            discount = 0;
+        }
+
+        product.Price = price;
+        product.DiscountedPrice = discountedPrice;
+        product.Discount = discount;
         product.TaxRate = dto.TaxRate;
         product.Desi = dto.Desi;
         product.Currency = dto.Currency;

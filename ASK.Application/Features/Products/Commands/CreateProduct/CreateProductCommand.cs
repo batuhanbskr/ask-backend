@@ -28,6 +28,24 @@ public class CreateProductCommandHandler(IUnitOfWork unitOfWork)
         if (!await unitOfWork.Brands.AnyAsync(b => b.Id == dto.BrandId && b.IsActive, cancellationToken))
             throw new NotFoundException(nameof(Brand), dto.BrandId);
 
+        var price = dto.Price;
+        var discount = dto.Discount;
+        var discountedPrice = dto.DiscountedPrice;
+
+        if (discount > 0 && (discountedPrice <= 0 || discountedPrice == price))
+        {
+            discountedPrice = price * (1 - discount / 100);
+        }
+        else if (discountedPrice > 0 && discountedPrice < price && discount <= 0)
+        {
+            discount = Math.Round((1 - (discountedPrice / price)) * 100, 2);
+        }
+        else if (discountedPrice <= 0 || discountedPrice > price)
+        {
+            discountedPrice = price;
+            discount = 0;
+        }
+
         var product = new Product
         {
             Name = dto.Name,
@@ -42,9 +60,9 @@ public class CreateProductCommandHandler(IUnitOfWork unitOfWork)
             FeaturesJson = JsonSerializer.Serialize(dto.Features),
             SpecificationsJson = JsonSerializer.Serialize(dto.Specifications),
             Stock = dto.Stock,
-            Price = dto.Price,
-            DiscountedPrice = dto.DiscountedPrice,
-            Discount = dto.Discount,
+            Price = price,
+            DiscountedPrice = discountedPrice,
+            Discount = discount,
             TaxRate = dto.TaxRate,
             Desi = dto.Desi,
             Currency = dto.Currency,

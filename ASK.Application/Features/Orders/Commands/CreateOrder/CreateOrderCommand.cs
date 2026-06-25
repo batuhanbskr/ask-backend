@@ -47,12 +47,24 @@ public class CreateOrderCommandHandler(IUnitOfWork unitOfWork)
             Notes = request.Notes
         };
 
+        var user = await unitOfWork.Users.GetByIdAsync(request.UserId, cancellationToken);
+        var globalDiscountRate = user?.GlobalDiscountRate ?? 0;
+
         decimal total = 0;
 
         foreach (var cartItem in cart.CartItems)
         {
             var product = await unitOfWork.Products.GetByIdAsync(cartItem.ProductId, cancellationToken)!;
             var unitPrice = product!.DiscountedPrice;
+            if (unitPrice <= 0 || unitPrice > product.Price)
+            {
+                unitPrice = product.Price;
+            }
+
+            if (globalDiscountRate > 0)
+            {
+                unitPrice = unitPrice * (1 - globalDiscountRate / 100);
+            }
 
             order.OrderItems.Add(new OrderItem
             {

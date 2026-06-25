@@ -27,6 +27,9 @@ public class User : BaseEntity
     /// <summary>Pasif kullanıcılar giriş yapamaz (soft ban).</summary>
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Kullanıcıya özel global indirim oranı (yüzde olarak, örn: 10.00 %10 indirim demektir).</summary>
+    public decimal GlobalDiscountRate { get; set; } = 0;
+
     public int? SalesRepresentativeId { get; set; }
     public User? SalesRepresentative { get; set; }
 
