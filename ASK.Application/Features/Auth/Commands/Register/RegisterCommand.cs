@@ -63,6 +63,7 @@ public class RegisterCommandHandler(
         return new AuthResponseDto(
             user.Id, user.Email, user.FirstName, user.LastName,
             user.Role.ToString(), accessToken, refreshTokenValue,
-            DateTime.UtcNow.AddHours(1));
+            DateTime.UtcNow.AddHours(1),
+            null);
     }
 }

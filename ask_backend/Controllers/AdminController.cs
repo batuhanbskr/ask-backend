@@ -18,16 +18,18 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ASK.Infrastructure.Persistence;
 
+using ASK.Application.Common.Interfaces;
+
 namespace ask_backend.Controllers;
 
 /// <summary>
 /// Tüm admin operasyonlarının tek giriş noktası.
-/// Tüm action'lar [Authorize(Roles = "Admin")] gerektirir.
+/// Tüm action'lar [Authorize(Roles = "Admin,SuperAdmin")] gerektirir.
 /// </summary>
 [ApiController]
 [Route("api/admin")]
-[Authorize(Roles = "Admin")]
-public class AdminController(IMediator mediator, AppDbContext db)
+[Authorize(Roles = "Admin,SuperAdmin")]
+public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserService currentUser, IPasswordHasher passwordHasher)
     : ControllerBase
 {
     // ═══════════════════════════════════════════════════════════
@@ -37,15 +39,31 @@ public class AdminController(IMediator mediator, AppDbContext db)
     [HttpGet("dashboard")]
     public async Task<IActionResult> GetDashboard(CancellationToken ct)
     {
+        var currentUserId = currentUser.UserId ?? 0;
+        var isSuperAdmin = currentUser.Role == "SuperAdmin";
+
         var totalProducts  = await db.Products.CountAsync(ct);
-        var totalUsers     = await db.Users.CountAsync(ct);
-        var totalOrders    = await db.Orders.CountAsync(ct);
-        var pendingOrders  = await db.Orders.CountAsync(o => o.Status == OrderStatus.Pending, ct);
-        var totalRevenue   = await db.Orders
+        
+        var usersQuery = db.Users.AsQueryable();
+        var ordersQuery = db.Orders.AsQueryable();
+        var paymentsQuery = db.Payments.AsQueryable();
+
+        if (!isSuperAdmin)
+        {
+            usersQuery = usersQuery.Where(u => u.SalesRepresentativeId == currentUserId);
+            ordersQuery = ordersQuery.Where(o => o.User.SalesRepresentativeId == currentUserId);
+            paymentsQuery = paymentsQuery.Where(p => p.User != null && p.User.SalesRepresentativeId == currentUserId);
+        }
+
+        var totalUsers     = await usersQuery.CountAsync(ct);
+        var totalOrders    = await ordersQuery.CountAsync(ct);
+        var pendingOrders  = await ordersQuery.CountAsync(o => o.Status == OrderStatus.Pending, ct);
+        var totalRevenue   = await ordersQuery
             .Where(o => o.Status != OrderStatus.Cancelled)
             .SumAsync(o => o.TotalAmount, ct);
-        var totalPayments  = await db.Payments.SumAsync(p => p.Amount, ct);
-        var recentOrders   = await db.Orders
+        var totalPayments  = await paymentsQuery.SumAsync(p => p.Amount, ct);
+        
+        var recentOrders   = await ordersQuery
             .Include(o => o.User)
             .OrderByDescending(o => o.CreatedAt)
             .Take(5)
@@ -54,6 +72,7 @@ public class AdminController(IMediator mediator, AppDbContext db)
                 CustomerName = o.User.FirstName + " " + o.User.LastName
             })
             .ToListAsync(ct);
+            
         var lowStock = await db.Products
             .Where(p => p.Stock < 10)
             .OrderBy(p => p.Stock)
@@ -152,8 +171,17 @@ public class AdminController(IMediator mediator, AppDbContext db)
         [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int limit = 20,
         CancellationToken ct = default)
     {
+        var currentUserId = currentUser.UserId ?? 0;
+        var isSuperAdmin = currentUser.Role == "SuperAdmin";
+
         limit = Math.Clamp(limit, 1, 100);
         var query = db.Users.AsQueryable();
+
+        if (!isSuperAdmin)
+        {
+            query = query.Where(u => u.SalesRepresentativeId == currentUserId);
+        }
+
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(u =>
                 u.FirstName.Contains(search) || u.LastName.Contains(search) ||
@@ -165,7 +193,9 @@ public class AdminController(IMediator mediator, AppDbContext db)
             .Skip((page - 1) * limit).Take(limit)
             .Select(u => new {
                 u.Id, u.FirstName, u.LastName, u.Email, u.Phone,
-                u.Company, u.City, u.Role, u.IsActive, u.CreatedAt
+                u.Company, u.City, u.Role, u.IsActive, u.CreatedAt,
+                SalesRepresentativeId = u.SalesRepresentativeId,
+                SalesRepresentativeName = u.SalesRepresentative != null ? u.SalesRepresentative.FirstName + " " + u.SalesRepresentative.LastName : null
             })
             .ToListAsync(ct);
 
@@ -175,23 +205,40 @@ public class AdminController(IMediator mediator, AppDbContext db)
     [HttpGet("users/{id:int}")]
     public async Task<IActionResult> GetUser(int id, CancellationToken ct)
     {
-        var user = await db.Users.Where(u => u.Id == id)
+        var currentUserId = currentUser.UserId ?? 0;
+        var isSuperAdmin = currentUser.Role == "SuperAdmin";
+
+        var query = db.Users.Where(u => u.Id == id);
+
+        if (!isSuperAdmin)
+        {
+            query = query.Where(u => u.SalesRepresentativeId == currentUserId);
+        }
+
+        var user = await query
             .Select(u => new {
                 u.Id, u.FirstName, u.LastName, u.Email, u.Phone,
                 u.Company, u.Address, u.City, u.Role, u.IsActive, u.CreatedAt,
+                SalesRepresentativeId = u.SalesRepresentativeId,
                 OrderCount = u.Orders.Count
             })
             .FirstOrDefaultAsync(ct);
 
-        if (user is null) return NotFound(new { success = false, message = "Kullanıcı bulunamadı." });
+        if (user is null) return NotFound(new { success = false, message = "Kullanıcı bulunamadı veya yetkiniz yok." });
         return Ok(new { success = true, data = user });
     }
 
     [HttpPut("users/{id:int}")]
     public async Task<IActionResult> UpdateUser(int id, [FromBody] AdminUpdateUserDto dto, CancellationToken ct)
     {
+        var currentUserId = currentUser.UserId ?? 0;
+        var isSuperAdmin = currentUser.Role == "SuperAdmin";
+
         var user = await db.Users.FindAsync([id], ct);
         if (user is null) return NotFound(new { success = false, message = "Kullanıcı bulunamadı." });
+
+        if (!isSuperAdmin && user.SalesRepresentativeId != currentUserId)
+            return Forbid();
 
         user.FirstName = dto.FirstName;
         user.LastName  = dto.LastName;
@@ -201,6 +248,7 @@ public class AdminController(IMediator mediator, AppDbContext db)
         user.Address   = dto.Address;
         user.Role      = dto.Role;
         user.IsActive  = dto.IsActive;
+        user.SalesRepresentativeId = dto.SalesRepresentativeId;
         user.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
@@ -210,14 +258,60 @@ public class AdminController(IMediator mediator, AppDbContext db)
     [HttpDelete("users/{id:int}")]
     public async Task<IActionResult> DeleteUser(int id, CancellationToken ct)
     {
+        var currentUserId = currentUser.UserId ?? 0;
+        var isSuperAdmin = currentUser.Role == "SuperAdmin";
+
         var user = await db.Users.FindAsync([id], ct);
         if (user is null) return NotFound(new { success = false, message = "Kullanıcı bulunamadı." });
+
+        if (!isSuperAdmin && user.SalesRepresentativeId != currentUserId)
+            return Forbid();
 
         // Soft delete — tamamen silmek yerine pasif yap
         user.IsActive  = false;
         user.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return Ok(new { success = true, message = "Kullanıcı pasif yapıldı." });
+    }
+
+    [HttpPost("users")]
+    public async Task<IActionResult> CreateUser([FromBody] AdminCreateUserDto dto, CancellationToken ct)
+    {
+        var isSuperAdmin = currentUser.Role == "SuperAdmin";
+        if (!isSuperAdmin)
+            return Forbid();
+
+        var exists = await db.Users.AnyAsync(u => u.Email == dto.Email, ct);
+        if (exists)
+            return BadRequest(new { success = false, message = "Bu e-posta adresi zaten kullanımda." });
+
+        var user = new User
+        {
+            FirstName = dto.FirstName,
+            LastName = dto.LastName,
+            Email = dto.Email.ToLowerInvariant().Trim(),
+            PasswordHash = passwordHasher.Hash(dto.Password),
+            Phone = dto.Phone,
+            Company = dto.Company,
+            City = dto.City,
+            Address = dto.Address,
+            Role = dto.Role,
+            IsActive = true,
+            SalesRepresentativeId = dto.SalesRepresentativeId,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        db.Users.Add(user);
+
+        if (dto.Role == UserRole.Customer)
+        {
+            var cart = new Cart { User = user };
+            db.Carts.Add(cart);
+        }
+
+        await db.SaveChangesAsync(ct);
+        return StatusCode(201, new { success = true, message = "Kullanıcı başarıyla oluşturuldu.", data = new { user.Id } });
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -230,8 +324,16 @@ public class AdminController(IMediator mediator, AppDbContext db)
         [FromQuery] int page = 1, [FromQuery] int limit = 20,
         CancellationToken ct = default)
     {
+        var currentUserId = currentUser.UserId ?? 0;
+        var isSuperAdmin = currentUser.Role == "SuperAdmin";
+
         limit = Math.Clamp(limit, 1, 100);
         var query = db.Orders.Include(o => o.User).Include(o => o.OrderItems).AsQueryable();
+
+        if (!isSuperAdmin)
+        {
+            query = query.Where(o => o.User.SalesRepresentativeId == currentUserId);
+        }
 
         if (status.HasValue)
             query = query.Where(o => (int)o.Status == status.Value);
@@ -282,11 +384,19 @@ public class AdminController(IMediator mediator, AppDbContext db)
         [FromQuery] int page = 1, [FromQuery] int limit = 20,
         CancellationToken ct = default)
     {
+        var currentUserId = currentUser.UserId ?? 0;
+        var isSuperAdmin = currentUser.Role == "SuperAdmin";
+
         limit = Math.Clamp(limit, 1, 100);
         var query = db.Payments
             .Include(p => p.User)
             .Include(p => p.Order)
             .AsQueryable();
+
+        if (!isSuperAdmin)
+        {
+            query = query.Where(p => p.User != null && p.User.SalesRepresentativeId == currentUserId);
+        }
 
         if (method.HasValue) query = query.Where(p => (int)p.Method == method.Value);
         if (status.HasValue) query = query.Where(p => (int)p.Status == status.Value);
@@ -395,6 +505,17 @@ public class AdminController(IMediator mediator, AppDbContext db)
         PaymentStatus.Refunded  => "İade Edildi",
         _ => "Bilinmiyor"
     };
+
+    [HttpGet("sales-representatives")]
+    public async Task<IActionResult> GetSalesRepresentatives(CancellationToken ct)
+    {
+        var admins = await db.Users
+            .Where(u => u.Role == UserRole.Admin || u.Role == UserRole.SuperAdmin)
+            .OrderBy(u => u.FirstName).ThenBy(u => u.LastName)
+            .Select(u => new { u.Id, u.FirstName, u.LastName, u.Email })
+            .ToListAsync(ct);
+        return Ok(new { success = true, data = admins });
+    }
 }
 
 // ─── DTOs (yalnızca Admin'e özel) ─────────────────────────────────────────────
@@ -402,7 +523,14 @@ public class AdminController(IMediator mediator, AppDbContext db)
 public record AdminUpdateUserDto(
     string FirstName, string LastName,
     string? Phone, string? Company, string? City, string? Address,
-    UserRole Role, bool IsActive
+    UserRole Role, bool IsActive, int? SalesRepresentativeId
+);
+
+public record AdminCreateUserDto(
+    string FirstName, string LastName,
+    string Email, string Password,
+    string? Phone, string? Company, string? City, string? Address,
+    UserRole Role, int? SalesRepresentativeId
 );
 
 public record CreatePaymentDto(

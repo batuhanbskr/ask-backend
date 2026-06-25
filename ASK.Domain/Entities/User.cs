@@ -27,8 +27,12 @@ public class User : BaseEntity
     /// <summary>Pasif kullanıcılar giriş yapamaz (soft ban).</summary>
     public bool IsActive { get; set; } = true;
 
+    public int? SalesRepresentativeId { get; set; }
+    public User? SalesRepresentative { get; set; }
+
     // --- Navigation Properties ---
     public ICollection<Order> Orders { get; set; } = [];
     public Cart? Cart { get; set; }
     public ICollection<RefreshToken> RefreshTokens { get; set; } = [];
+    public ICollection<User> Clients { get; set; } = [];
 }

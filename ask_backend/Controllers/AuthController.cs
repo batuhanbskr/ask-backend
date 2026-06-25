@@ -4,6 +4,10 @@ using ASK.Application.Features.Auth.Commands.RefreshToken;
 using ASK.Application.Features.Auth.Commands.Register;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using ASK.Application.Common.Interfaces;
+using ASK.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace ask_backend.Controllers;
 
@@ -12,7 +16,7 @@ namespace ask_backend.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController(IMediator mediator) : ControllerBase
+public class AuthController(IMediator mediator, ICurrentUserService currentUser, AppDbContext db) : ControllerBase
 {
     /// <summary>Yeni kullanıcı kaydı.</summary>
     [HttpPost("register")]
@@ -46,5 +50,46 @@ public class AuthController(IMediator mediator) : ControllerBase
     {
         var result = await mediator.Send(new RefreshTokenCommand(dto.RefreshToken), cancellationToken);
         return Ok(new { success = true, data = result });
+    }
+
+    /// <summary>Mevcut kullanıcı profil bilgilerini ve satış danışmanını döner.</summary>
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> GetMe(CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+        if (userId == null)
+            return Unauthorized(new { success = false, message = "Oturum açılmamış." });
+
+        var user = await db.Users
+            .Include(u => u.SalesRepresentative)
+            .FirstOrDefaultAsync(u => u.Id == userId.Value, cancellationToken);
+
+        if (user is null)
+            return NotFound(new { success = false, message = "Kullanıcı bulunamadı." });
+
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                userId = user.Id,
+                email = user.Email,
+                firstName = user.FirstName,
+                lastName = user.LastName,
+                role = user.Role.ToString(),
+                phone = user.Phone,
+                company = user.Company,
+                address = user.Address,
+                city = user.City,
+                salesRepresentative = user.SalesRepresentative != null ? new
+                {
+                    firstName = user.SalesRepresentative.FirstName,
+                    lastName = user.SalesRepresentative.LastName,
+                    email = user.SalesRepresentative.Email,
+                    phone = user.SalesRepresentative.Phone
+                } : null
+            }
+        });
     }
 }

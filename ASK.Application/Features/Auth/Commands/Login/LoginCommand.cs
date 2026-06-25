@@ -46,6 +46,12 @@ public class LoginCommandHandler(
         return new AuthResponseDto(
             user.Id, user.Email, user.FirstName, user.LastName,
             user.Role.ToString(), accessToken, refreshTokenValue,
-            DateTime.UtcNow.AddHours(1));
+            DateTime.UtcNow.AddHours(1),
+            user.SalesRepresentative != null ? new SalesRepresentativeDto(
+                user.SalesRepresentative.FirstName,
+                user.SalesRepresentative.LastName,
+                user.SalesRepresentative.Email,
+                user.SalesRepresentative.Phone
+            ) : null);
     }
 }

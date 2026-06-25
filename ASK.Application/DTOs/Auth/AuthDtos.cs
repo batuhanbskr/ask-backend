@@ -18,6 +18,13 @@ public record RefreshTokenRequestDto(
     string RefreshToken
 );
 
+public record SalesRepresentativeDto(
+    string FirstName,
+    string LastName,
+    string Email,
+    string? Phone
+);
+
 public record AuthResponseDto(
     int UserId,
     string Email,
@@ -26,5 +33,6 @@ public record AuthResponseDto(
     string Role,
     string AccessToken,
     string RefreshToken,
-    DateTime AccessTokenExpiry
+    DateTime AccessTokenExpiry,
+    SalesRepresentativeDto? SalesRepresentative = null
 );

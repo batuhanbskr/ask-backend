@@ -23,7 +23,7 @@ public class RefreshTokenCommandHandler(
         if (storedToken is null)
             throw new UnauthorizedException("Geçersiz veya süresi dolmuş refresh token.");
 
-        var user = await unitOfWork.Users.GetByIdAsync(storedToken.UserId, cancellationToken)
+        var user = await unitOfWork.Users.GetWithSalesRepresentativeByIdAsync(storedToken.UserId, cancellationToken)
             ?? throw new UnauthorizedException("Kullanıcı bulunamadı.");
 
         if (!user.IsActive)
@@ -49,6 +49,12 @@ public class RefreshTokenCommandHandler(
         return new AuthResponseDto(
             user.Id, user.Email, user.FirstName, user.LastName,
             user.Role.ToString(), newAccessToken, newRefreshTokenValue,
-            DateTime.UtcNow.AddHours(1));
+            DateTime.UtcNow.AddHours(1),
+            user.SalesRepresentative != null ? new SalesRepresentativeDto(
+                user.SalesRepresentative.FirstName,
+                user.SalesRepresentative.LastName,
+                user.SalesRepresentative.Email,
+                user.SalesRepresentative.Phone
+            ) : null);
     }
 }
