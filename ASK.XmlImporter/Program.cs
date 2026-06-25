@@ -39,14 +39,14 @@ Console.WriteLine();
 
 try
 {
-    var fetcher  = provider.GetRequiredService<IXmlFetcher>();
-    var parser   = provider.GetRequiredService<IXmlParser>();
-    var importer = provider.GetRequiredService<IProductImporter>();
-
-    var xml   = await fetcher.FetchAsync(sourceUrl);
-    var nodes = parser.Parse(xml);
-
-    await importer.ImportAsync(nodes);
+    var db = provider.GetRequiredService<AppDbContext>();
+    var categories = await db.Categories.ToListAsync();
+    Console.WriteLine("--- CATEGORIES IN DB ---");
+    foreach (var c in categories)
+    {
+        Console.WriteLine($"ID: {c.Id}, Name: {c.Name}, ParentCategoryId: {c.ParentCategoryId}");
+    }
+    Console.WriteLine("------------------------");
 }
 catch (Exception ex)
 {

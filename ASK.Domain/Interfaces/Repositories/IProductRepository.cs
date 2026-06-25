@@ -6,7 +6,7 @@ public interface IProductRepository : IRepository<Product>
 {
     Task<Product?> GetBySlugAsync(string slug, CancellationToken cancellationToken = default);
     Task<(IReadOnlyList<Product> Items, int Total)> GetPagedAsync(
-        int? categoryId, int? brandId, bool? isNew, bool? isFeatured,
+        int? categoryId, int? brandId, bool? isNew, bool? isFeatured, bool? inStockOnly,
         string? search, int page, int limit, bool activeOnly = true, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Product>> GetFeaturedAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Product>> GetNewAsync(CancellationToken cancellationToken = default);

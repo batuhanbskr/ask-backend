@@ -11,6 +11,7 @@ public record GetProductsQuery(
     int? BrandId,
     bool? IsNew,
     bool? IsFeatured,
+    bool? InStockOnly,
     string? Search,
     int Page = 1,
     int Limit = 12,
@@ -24,7 +25,7 @@ public class GetProductsQueryHandler(IUnitOfWork unitOfWork)
         GetProductsQuery request, CancellationToken cancellationToken)
     {
         var (items, total) = await unitOfWork.Products.GetPagedAsync(
-            request.CategoryId, request.BrandId, request.IsNew, request.IsFeatured,
+            request.CategoryId, request.BrandId, request.IsNew, request.IsFeatured, request.InStockOnly,
             request.Search, request.Page, request.Limit, request.ActiveOnly, cancellationToken);
 
         var dtos = items.Select(MapToDto).ToList();

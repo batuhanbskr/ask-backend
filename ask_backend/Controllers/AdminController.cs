@@ -80,7 +80,7 @@ public class AdminController(IMediator mediator, AppDbContext db)
     {
         limit = Math.Clamp(limit, 1, 100);
         var result = await mediator.Send(
-            new GetProductsQuery(categoryId, brandId, isNew, isFeatured, search, page, limit, ActiveOnly: false), ct);
+            new GetProductsQuery(categoryId, brandId, isNew, isFeatured, null, search, page, limit, ActiveOnly: false), ct);
         return Ok(result);
     }
 

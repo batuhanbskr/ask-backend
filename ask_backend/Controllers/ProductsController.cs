@@ -24,6 +24,7 @@ public class ProductsController(IMediator mediator) : ControllerBase
         [FromQuery] int? brandId,
         [FromQuery] bool? isNew,
         [FromQuery] bool? isFeatured,
+        [FromQuery] bool? inStockOnly,
         [FromQuery] string? search,
         [FromQuery] int page = 1,
         [FromQuery] int limit = 12,
@@ -34,7 +35,7 @@ public class ProductsController(IMediator mediator) : ControllerBase
         page = Math.Max(1, page);
 
         var result = await mediator.Send(
-            new GetProductsQuery(categoryId, brandId, isNew, isFeatured, search, page, limit),
+            new GetProductsQuery(categoryId, brandId, isNew, isFeatured, inStockOnly, search, page, limit),
             cancellationToken);
         return Ok(result);
     }
