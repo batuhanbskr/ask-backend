@@ -36,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<IEmailService, EmailService>();
 
         // JWT ayarları
         services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
