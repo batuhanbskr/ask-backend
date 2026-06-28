@@ -397,6 +397,57 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         return Ok(new { success = true, data = result });
     }
 
+    [HttpDelete("orders/{id:int}")]
+    public async Task<IActionResult> DeleteOrder(int id, CancellationToken ct)
+    {
+        var order = await db.Orders.Include(o => o.OrderItems).FirstOrDefaultAsync(o => o.Id == id, ct);
+        if (order is null) return NotFound(new { success = false, message = "Sipariş bulunamadı." });
+
+        // Delete associated payments to prevent orphans and correct statistics
+        var payments = await db.Payments.Where(p => p.OrderId == id).ToListAsync(ct);
+        if (payments.Any())
+        {
+            db.Payments.RemoveRange(payments);
+        }
+
+        // Delete items explicitly
+        if (order.OrderItems.Any())
+        {
+            db.OrderItems.RemoveRange(order.OrderItems);
+        }
+
+        db.Orders.Remove(order);
+        await db.SaveChangesAsync(ct);
+
+        return Ok(new { success = true, message = "Sipariş ve ilişkili tüm kayıtlar silindi." });
+    }
+
+    [HttpDelete("orders/{orderId:int}/items/{itemId:int}")]
+    public async Task<IActionResult> DeleteOrderItem(int orderId, int itemId, CancellationToken ct)
+    {
+        var order = await db.Orders.Include(o => o.OrderItems).FirstOrDefaultAsync(o => o.Id == orderId, ct);
+        if (order is null) return NotFound(new { success = false, message = "Sipariş bulunamadı." });
+
+        var item = order.OrderItems.FirstOrDefault(i => i.Id == itemId);
+        if (item is null) return NotFound(new { success = false, message = "Sipariş kalemi bulunamadı." });
+
+        db.OrderItems.Remove(item);
+        
+        // Recalculate order total amount (excluding the item we just removed)
+        order.TotalAmount = order.OrderItems.Where(i => i.Id != itemId).Sum(i => i.Quantity * i.UnitPrice);
+        order.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        return Ok(new { 
+            success = true, 
+            message = "Sipariş kalemi silindi ve sipariş tutarı güncellendi.",
+            data = new {
+                order.TotalAmount
+            }
+        });
+    }
+
     // ═══════════════════════════════════════════════════════════
     // PAYMENTS
     // ═══════════════════════════════════════════════════════════
