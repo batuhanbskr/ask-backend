@@ -52,7 +52,9 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         {
             usersQuery = usersQuery.Where(u => u.SalesRepresentativeId == currentUserId);
             ordersQuery = ordersQuery.Where(o => o.User.SalesRepresentativeId == currentUserId);
-            paymentsQuery = paymentsQuery.Where(p => p.User != null && p.User.SalesRepresentativeId == currentUserId);
+            paymentsQuery = paymentsQuery.Where(p =>
+                (p.User != null && p.User.SalesRepresentativeId == currentUserId) ||
+                (p.Order != null && p.Order.User.SalesRepresentativeId == currentUserId));
         }
 
         var totalUsers     = await usersQuery.CountAsync(ct);
@@ -353,16 +355,36 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             .Skip((page - 1) * limit).Take(limit)
             .ToListAsync(ct);
 
-        var dto = orders.Select(o => new {
-            o.Id, o.OrderNumber, o.Status,
-            StatusLabel = GetOrderStatusLabel(o.Status),
-            o.TotalAmount, o.ShippingAddress, o.Notes, o.CreatedAt,
-            CustomerName = o.User.FirstName + " " + o.User.LastName,
-            CustomerEmail = o.User.Email,
-            Items = o.OrderItems.Select(i => new {
-                i.Id, i.ProductId, i.ProductName, i.Quantity, i.UnitPrice,
-                LineTotal = i.Quantity * i.UnitPrice
-            })
+        var orderIds = orders.Select(o => o.Id).ToList();
+        var payments = await db.Payments
+            .Where(p => p.OrderId.HasValue && orderIds.Contains(p.OrderId.Value) && p.Status == PaymentStatus.Completed)
+            .ToListAsync(ct);
+
+        var dto = orders.Select(o => {
+            var oPayments = payments.Where(p => p.OrderId == o.Id).ToList();
+            var paidAmount = oPayments.Sum(p => p.Amount);
+            var remainingAmount = o.TotalAmount - paidAmount;
+            return new {
+                o.Id, o.OrderNumber, o.Status,
+                StatusLabel = GetOrderStatusLabel(o.Status),
+                o.TotalAmount, o.ShippingAddress, o.Notes, o.CreatedAt,
+                CustomerName = o.User.FirstName + " " + o.User.LastName,
+                CustomerEmail = o.User.Email,
+                PaidAmount = paidAmount,
+                RemainingAmount = remainingAmount,
+                PaymentRatio = o.TotalAmount > 0 ? (paidAmount / o.TotalAmount) * 100 : 0,
+                Items = o.OrderItems.Select(i => new {
+                    i.Id, i.ProductId, i.ProductName, i.Quantity, i.UnitPrice,
+                    LineTotal = i.Quantity * i.UnitPrice
+                }),
+                Payments = oPayments.Select(p => new {
+                    p.Id, p.PaymentNumber, p.Amount, p.Method,
+                    MethodLabel = GetPaymentMethodLabel(p.Method),
+                    p.Status,
+                    StatusLabel = GetPaymentStatusLabel(p.Status),
+                    p.Description, p.Reference, p.PaidAt
+                })
+            };
         });
 
         return Ok(new { success = true, data = dto, total, page, limit });
@@ -431,6 +453,21 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
     [HttpPost("payments")]
     public async Task<IActionResult> CreatePayment([FromBody] CreatePaymentDto dto, CancellationToken ct)
     {
+        if (!dto.OrderId.HasValue)
+        {
+            return BadRequest(new { success = false, message = "Ödeme bir sipariş ile ilişkilendirilmelidir." });
+        }
+
+        int? resolvedUserId = dto.UserId;
+        if (!resolvedUserId.HasValue)
+        {
+            var order = await db.Orders.FindAsync(new object[] { dto.OrderId.Value }, ct);
+            if (order != null)
+            {
+                resolvedUserId = order.UserId;
+            }
+        }
+
         var count = await db.Payments.CountAsync(ct) + 1;
         var payment = new Payment
         {
@@ -442,7 +479,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             Reference   = dto.Reference,
             PaidAt      = dto.PaidAt ?? DateTime.UtcNow,
             OrderId     = dto.OrderId,
-            UserId      = dto.UserId,
+            UserId      = resolvedUserId,
         };
         db.Payments.Add(payment);
         await db.SaveChangesAsync(ct);
@@ -452,8 +489,23 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
     [HttpPut("payments/{id:int}")]
     public async Task<IActionResult> UpdatePayment(int id, [FromBody] CreatePaymentDto dto, CancellationToken ct)
     {
-        var payment = await db.Payments.FindAsync([id], ct);
+        if (!dto.OrderId.HasValue)
+        {
+            return BadRequest(new { success = false, message = "Ödeme bir sipariş ile ilişkilendirilmelidir." });
+        }
+
+        var payment = await db.Payments.FindAsync(new object[] { id }, ct);
         if (payment is null) return NotFound(new { success = false, message = "Ödeme bulunamadı." });
+
+        int? resolvedUserId = dto.UserId;
+        if (!resolvedUserId.HasValue)
+        {
+            var order = await db.Orders.FindAsync(new object[] { dto.OrderId.Value }, ct);
+            if (order != null)
+            {
+                resolvedUserId = order.UserId;
+            }
+        }
 
         payment.Amount      = dto.Amount;
         payment.Method      = dto.Method;
@@ -462,7 +514,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         payment.Reference   = dto.Reference;
         payment.PaidAt      = dto.PaidAt ?? payment.PaidAt;
         payment.OrderId     = dto.OrderId;
-        payment.UserId      = dto.UserId;
+        payment.UserId      = resolvedUserId;
         payment.UpdatedAt   = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
@@ -517,6 +569,50 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             .Select(u => new { u.Id, u.FirstName, u.LastName, u.Email })
             .ToListAsync(ct);
         return Ok(new { success = true, data = admins });
+    }
+
+    [HttpGet("sales-representatives/performances")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetSalesRepresentativePerformances(CancellationToken ct)
+    {
+        var admins = await db.Users
+            .Where(u => u.Role == UserRole.Admin || u.Role == UserRole.SuperAdmin)
+            .OrderBy(u => u.FirstName).ThenBy(u => u.LastName)
+            .ToListAsync(ct);
+
+        var result = new List<object>();
+
+        foreach (var admin in admins)
+        {
+            var totalClients = await db.Users
+                .CountAsync(u => u.SalesRepresentativeId == admin.Id, ct);
+
+            var totalOrders = await db.Orders
+                .CountAsync(o => o.User.SalesRepresentativeId == admin.Id, ct);
+
+            var totalSales = await db.Orders
+                .Where(o => o.User.SalesRepresentativeId == admin.Id && o.Status != OrderStatus.Cancelled)
+                .SumAsync(o => o.TotalAmount, ct);
+
+            var totalPayments = await db.Payments
+                .Where(p => p.Status == PaymentStatus.Completed &&
+                    ((p.User != null && p.User.SalesRepresentativeId == admin.Id) ||
+                     (p.Order != null && p.Order.User.SalesRepresentativeId == admin.Id)))
+                .SumAsync(p => p.Amount, ct);
+
+            result.Add(new {
+                admin.Id,
+                FullName = admin.FirstName + " " + admin.LastName,
+                admin.Email,
+                Role = admin.Role.ToString(),
+                TotalClients = totalClients,
+                TotalOrders = totalOrders,
+                TotalSales = totalSales,
+                TotalPayments = totalPayments
+            });
+        }
+
+        return Ok(new { success = true, data = result });
     }
 }
 
