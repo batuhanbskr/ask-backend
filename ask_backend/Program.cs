@@ -170,27 +170,6 @@ if (app.Environment.IsDevelopment())
     await db.Database.MigrateAsync();
 }
 
-try
-{
-    var unresolvedPayments = await db.Payments
-        .Include(p => p.Order)
-        .Where(p => !p.UserId.HasValue && p.OrderId.HasValue)
-        .ToListAsync();
-    if (unresolvedPayments.Any())
-    {
-        foreach (var p in unresolvedPayments)
-        {
-            if (p.Order != null)
-            {
-                p.UserId = p.Order.UserId;
-            }
-        }
-        await db.SaveChangesAsync();
-    }
-}
-catch (Exception)
-{
-    // Fail-safe: database might not be fully migrated or accessible
-}
+// Database migrations completed.
 
 app.Run();

@@ -17,11 +17,6 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.HasIndex(p => p.PaymentNumber).IsUnique();
         builder.HasIndex(p => p.PaidAt);
 
-        builder.HasOne(p => p.Order)
-            .WithMany()
-            .HasForeignKey(p => p.OrderId)
-            .OnDelete(DeleteBehavior.SetNull);
-
         builder.HasOne(p => p.User)
             .WithMany()
             .HasForeignKey(p => p.UserId)

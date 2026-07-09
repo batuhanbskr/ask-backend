@@ -53,8 +53,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             usersQuery = usersQuery.Where(u => u.SalesRepresentativeId == currentUserId);
             ordersQuery = ordersQuery.Where(o => o.User.SalesRepresentativeId == currentUserId);
             paymentsQuery = paymentsQuery.Where(p =>
-                (p.User != null && p.User.SalesRepresentativeId == currentUserId) ||
-                (p.Order != null && p.Order.User.SalesRepresentativeId == currentUserId));
+                p.User != null && p.User.SalesRepresentativeId == currentUserId);
         }
 
         var totalUsers     = await usersQuery.CountAsync(ct);
@@ -355,36 +354,16 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             .Skip((page - 1) * limit).Take(limit)
             .ToListAsync(ct);
 
-        var orderIds = orders.Select(o => o.Id).ToList();
-        var payments = await db.Payments
-            .Where(p => p.OrderId.HasValue && orderIds.Contains(p.OrderId.Value) && p.Status == PaymentStatus.Completed)
-            .ToListAsync(ct);
-
-        var dto = orders.Select(o => {
-            var oPayments = payments.Where(p => p.OrderId == o.Id).ToList();
-            var paidAmount = oPayments.Sum(p => p.Amount);
-            var remainingAmount = o.TotalAmount - paidAmount;
-            return new {
-                o.Id, o.OrderNumber, o.Status,
-                StatusLabel = GetOrderStatusLabel(o.Status),
-                o.TotalAmount, o.ShippingAddress, o.Notes, o.CreatedAt,
-                CustomerName = o.User.FirstName + " " + o.User.LastName,
-                CustomerEmail = o.User.Email,
-                PaidAmount = paidAmount,
-                RemainingAmount = remainingAmount,
-                PaymentRatio = o.TotalAmount > 0 ? (paidAmount / o.TotalAmount) * 100 : 0,
-                Items = o.OrderItems.Select(i => new {
-                    i.Id, i.ProductId, i.ProductName, i.Quantity, i.UnitPrice,
-                    LineTotal = i.Quantity * i.UnitPrice
-                }),
-                Payments = oPayments.Select(p => new {
-                    p.Id, p.PaymentNumber, p.Amount, p.Method,
-                    MethodLabel = GetPaymentMethodLabel(p.Method),
-                    p.Status,
-                    StatusLabel = GetPaymentStatusLabel(p.Status),
-                    p.Description, p.Reference, p.PaidAt
-                })
-            };
+        var dto = orders.Select(o => new {
+            o.Id, o.OrderNumber, o.Status,
+            StatusLabel = GetOrderStatusLabel(o.Status),
+            o.TotalAmount, o.ShippingAddress, o.Notes, o.CreatedAt,
+            CustomerName = o.User.FirstName + " " + o.User.LastName,
+            CustomerEmail = o.User.Email,
+            Items = o.OrderItems.Select(i => new {
+                i.Id, i.ProductId, i.ProductName, i.Quantity, i.UnitPrice,
+                LineTotal = i.Quantity * i.UnitPrice
+            })
         });
 
         return Ok(new { success = true, data = dto, total, page, limit });
@@ -402,13 +381,6 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
     {
         var order = await db.Orders.Include(o => o.OrderItems).FirstOrDefaultAsync(o => o.Id == id, ct);
         if (order is null) return NotFound(new { success = false, message = "Sipariş bulunamadı." });
-
-        // Delete associated payments to prevent orphans and correct statistics
-        var payments = await db.Payments.Where(p => p.OrderId == id).ToListAsync(ct);
-        if (payments.Any())
-        {
-            db.Payments.RemoveRange(payments);
-        }
 
         // Delete items explicitly
         if (order.OrderItems.Any())
@@ -465,7 +437,6 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         limit = Math.Clamp(limit, 1, 100);
         var query = db.Payments
             .Include(p => p.User)
-            .Include(p => p.Order)
             .AsQueryable();
 
         if (!isSuperAdmin)
@@ -492,7 +463,6 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
                 MethodLabel = GetPaymentMethodLabel(p.Method),
                 StatusLabel = GetPaymentStatusLabel(p.Status),
                 p.Description, p.Reference, p.PaidAt,
-                p.OrderId, OrderNumber = p.Order != null ? p.Order.OrderNumber : null,
                 p.UserId,
                 CustomerName = p.User != null ? p.User.FirstName + " " + p.User.LastName : null
             })
@@ -504,19 +474,9 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
     [HttpPost("payments")]
     public async Task<IActionResult> CreatePayment([FromBody] CreatePaymentDto dto, CancellationToken ct)
     {
-        if (!dto.OrderId.HasValue)
+        if (!dto.UserId.HasValue)
         {
-            return BadRequest(new { success = false, message = "Ödeme bir sipariş ile ilişkilendirilmelidir." });
-        }
-
-        int? resolvedUserId = dto.UserId;
-        if (!resolvedUserId.HasValue)
-        {
-            var order = await db.Orders.FindAsync(new object[] { dto.OrderId.Value }, ct);
-            if (order != null)
-            {
-                resolvedUserId = order.UserId;
-            }
+            return BadRequest(new { success = false, message = "Ödeme bir müşteri ile ilişkilendirilmelidir." });
         }
 
         var count = await db.Payments.CountAsync(ct) + 1;
@@ -529,8 +489,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             Description = dto.Description,
             Reference   = dto.Reference,
             PaidAt      = dto.PaidAt ?? DateTime.UtcNow,
-            OrderId     = dto.OrderId,
-            UserId      = resolvedUserId,
+            UserId      = dto.UserId.Value,
         };
         db.Payments.Add(payment);
         await db.SaveChangesAsync(ct);
@@ -540,23 +499,13 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
     [HttpPut("payments/{id:int}")]
     public async Task<IActionResult> UpdatePayment(int id, [FromBody] CreatePaymentDto dto, CancellationToken ct)
     {
-        if (!dto.OrderId.HasValue)
+        if (!dto.UserId.HasValue)
         {
-            return BadRequest(new { success = false, message = "Ödeme bir sipariş ile ilişkilendirilmelidir." });
+            return BadRequest(new { success = false, message = "Ödeme bir müşteri ile ilişkilendirilmelidir." });
         }
 
         var payment = await db.Payments.FindAsync(new object[] { id }, ct);
         if (payment is null) return NotFound(new { success = false, message = "Ödeme bulunamadı." });
-
-        int? resolvedUserId = dto.UserId;
-        if (!resolvedUserId.HasValue)
-        {
-            var order = await db.Orders.FindAsync(new object[] { dto.OrderId.Value }, ct);
-            if (order != null)
-            {
-                resolvedUserId = order.UserId;
-            }
-        }
 
         payment.Amount      = dto.Amount;
         payment.Method      = dto.Method;
@@ -564,8 +513,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         payment.Description = dto.Description;
         payment.Reference   = dto.Reference;
         payment.PaidAt      = dto.PaidAt ?? payment.PaidAt;
-        payment.OrderId     = dto.OrderId;
-        payment.UserId      = resolvedUserId;
+        payment.UserId      = dto.UserId.Value;
         payment.UpdatedAt   = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
@@ -647,8 +595,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
 
             var totalPayments = await db.Payments
                 .Where(p => p.Status == PaymentStatus.Completed &&
-                    ((p.User != null && p.User.SalesRepresentativeId == admin.Id) ||
-                     (p.Order != null && p.Order.User.SalesRepresentativeId == admin.Id)))
+                    p.User != null && p.User.SalesRepresentativeId == admin.Id)
                 .SumAsync(p => p.Amount, ct);
 
             result.Add(new {

@@ -28,10 +28,8 @@ public class Payment : BaseEntity
     public DateTime PaidAt { get; set; } = DateTime.UtcNow;
 
     // --- Foreign Keys (opsiyonel) ---
-    public int? OrderId { get; set; }
     public int? UserId { get; set; }
 
     // --- Navigation Properties ---
-    public Order? Order { get; set; }
     public User? User { get; set; }
 }
