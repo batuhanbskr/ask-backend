@@ -125,6 +125,115 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         return Ok(new { success = true, message = "Ürün silindi." });
     }
 
+    [HttpPost("products/bulk-update")]
+    public async Task<IActionResult> BulkUpdateProducts([FromBody] BulkUpdateProductsDto dto, CancellationToken ct)
+    {
+        var currentRole = currentUser.Role;
+        if (currentRole != "SuperAdmin")
+        {
+            return Forbid("Bu işlemi yalnızca SuperAdmin gerçekleştirebilir.");
+        }
+
+        var query = db.Products.AsQueryable();
+
+        if (dto.CategoryId.HasValue)
+        {
+            query = query.Where(p => p.CategoryId == dto.CategoryId.Value);
+        }
+
+        if (dto.BrandId.HasValue)
+        {
+            query = query.Where(p => p.BrandId == dto.BrandId.Value);
+        }
+
+        var products = await query.ToListAsync(ct);
+        if (products.Count == 0)
+        {
+            return Ok(new { success = true, message = "Güncellenecek ürün bulunamadı.", count = 0 });
+        }
+
+        foreach (var p in products)
+        {
+            switch (dto.ActionType.ToLower())
+            {
+                case "price":
+                    if (dto.ValueType.ToLower() == "percentage")
+                    {
+                        p.Price = Math.Round(p.Price * (1 + dto.Value / 100), 2);
+                        if (p.DiscountedPrice > 0)
+                        {
+                            p.DiscountedPrice = Math.Round(p.DiscountedPrice * (1 + dto.Value / 100), 2);
+                        }
+                    }
+                    else // fixed
+                    {
+                        p.Price = Math.Max(0, Math.Round(p.Price + dto.Value, 2));
+                        if (p.DiscountedPrice > 0)
+                        {
+                            p.DiscountedPrice = Math.Max(0, Math.Round(p.DiscountedPrice + dto.Value, 2));
+                        }
+                    }
+                    break;
+
+                case "discount":
+                    if (dto.ValueType.ToLower() == "percentage")
+                    {
+                        p.Discount = Math.Clamp(Math.Round(p.Discount * (1 + dto.Value / 100), 2), 0, 100);
+                    }
+                    else // set
+                    {
+                        p.Discount = Math.Clamp(Math.Round(dto.Value, 2), 0, 100);
+                    }
+                    if (p.Discount > 0)
+                    {
+                        p.DiscountedPrice = Math.Round(p.Price * (1 - p.Discount / 100), 2);
+                    }
+                    else
+                    {
+                        p.DiscountedPrice = 0;
+                    }
+                    break;
+
+                case "stock":
+                    if (dto.ValueType.ToLower() == "add")
+                    {
+                        p.Stock = Math.Max(0, p.Stock + (int)dto.Value);
+                    }
+                    else // set
+                    {
+                        p.Stock = Math.Max(0, (int)dto.Value);
+                    }
+                    break;
+
+                case "status":
+                    if (dto.StatusValue.HasValue)
+                    {
+                        p.Status = dto.StatusValue.Value ? 1 : 0;
+                    }
+                    break;
+
+                case "currency":
+                    if (!string.IsNullOrWhiteSpace(dto.Currency))
+                    {
+                        p.Currency = dto.Currency.ToUpper();
+                    }
+                    break;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        var updatedList = products.Select(p => new {
+            p.Id,
+            p.Code,
+            p.Name,
+            p.Price,
+            p.Stock,
+            p.Discount,
+            p.Currency
+        }).ToList();
+        return Ok(new { success = true, message = $"{products.Count} adet ürün başarıyla güncellendi.", count = products.Count, products = updatedList });
+    }
+
     // ═══════════════════════════════════════════════════════════
     // CATEGORIES
     // ═══════════════════════════════════════════════════════════
@@ -643,4 +752,14 @@ public record CreatePaymentDto(
     DateTime? PaidAt,
     int? OrderId,
     int? UserId
+);
+
+public record BulkUpdateProductsDto(
+    int? CategoryId,
+    int? BrandId,
+    string ActionType,
+    decimal Value,
+    string ValueType,
+    bool? StatusValue,
+    string? Currency
 );
