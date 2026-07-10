@@ -86,6 +86,13 @@ public class CreateOrderCommandHandler(IUnitOfWork unitOfWork, IEmailService ema
 
         await unitOfWork.Orders.AddAsync(order, cancellationToken);
 
+        // Cari bakiyeyi sipariş tutarı kadar düşür
+        if (user != null)
+        {
+            user.CurrentBalance -= total;
+            unitOfWork.Users.Update(user);
+        }
+
         // Sepeti temizle
         unitOfWork.Carts.Remove(cart);
         var newCart = new DomainCart { UserId = request.UserId };

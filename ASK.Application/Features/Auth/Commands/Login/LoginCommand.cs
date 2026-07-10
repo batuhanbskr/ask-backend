@@ -47,6 +47,7 @@ public class LoginCommandHandler(
             user.Id, user.Email, user.FirstName, user.LastName,
             user.Role.ToString(), accessToken, refreshTokenValue,
             DateTime.UtcNow.AddHours(1),
+            user.CurrentBalance,
             user.SalesRepresentative != null ? new SalesRepresentativeDto(
                 user.SalesRepresentative.FirstName,
                 user.SalesRepresentative.LastName,

@@ -46,7 +46,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         
         var usersQuery = db.Users.AsQueryable();
         var ordersQuery = db.Orders.AsQueryable();
-        var paymentsQuery = db.Payments.AsQueryable();
+        var paymentsQuery = db.Payments.Where(p => p.Status == PaymentStatus.Completed).AsQueryable();
 
         if (!isSuperAdmin)
         {
@@ -194,7 +194,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             .Skip((page - 1) * limit).Take(limit)
             .Select(u => new {
                 u.Id, u.FirstName, u.LastName, u.Email, u.Phone,
-                u.Company, u.City, u.Role, u.IsActive, u.GlobalDiscountRate, u.CreatedAt,
+                u.Company, u.City, u.Role, u.IsActive, u.GlobalDiscountRate, u.CurrentBalance, u.CreatedAt,
                 SalesRepresentativeId = u.SalesRepresentativeId,
                 SalesRepresentativeName = u.SalesRepresentative != null ? u.SalesRepresentative.FirstName + " " + u.SalesRepresentative.LastName : null
             })
@@ -219,7 +219,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         var user = await query
             .Select(u => new {
                 u.Id, u.FirstName, u.LastName, u.Email, u.Phone,
-                u.Company, u.Address, u.City, u.Role, u.IsActive, u.GlobalDiscountRate, u.CreatedAt,
+                u.Company, u.Address, u.City, u.Role, u.IsActive, u.GlobalDiscountRate, u.CurrentBalance, u.CreatedAt,
                 SalesRepresentativeId = u.SalesRepresentativeId,
                 OrderCount = u.Orders.Count
             })
@@ -251,6 +251,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         user.IsActive  = dto.IsActive;
         user.GlobalDiscountRate = dto.GlobalDiscountRate;
         user.SalesRepresentativeId = dto.SalesRepresentativeId;
+        user.CurrentBalance = dto.CurrentBalance;
         user.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
@@ -301,6 +302,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             IsActive = true,
             GlobalDiscountRate = dto.GlobalDiscountRate,
             SalesRepresentativeId = dto.SalesRepresentativeId,
+            CurrentBalance = dto.CurrentBalance,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -437,6 +439,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         limit = Math.Clamp(limit, 1, 100);
         var query = db.Payments
             .Include(p => p.User)
+            .Where(p => p.Status == PaymentStatus.Completed) // Only show successful payments
             .AsQueryable();
 
         if (!isSuperAdmin)
@@ -619,14 +622,16 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
 public record AdminUpdateUserDto(
     string FirstName, string LastName,
     string? Phone, string? Company, string? City, string? Address,
-    UserRole Role, bool IsActive, decimal GlobalDiscountRate, int? SalesRepresentativeId
+    UserRole Role, bool IsActive, decimal GlobalDiscountRate, int? SalesRepresentativeId,
+    decimal CurrentBalance
 );
 
 public record AdminCreateUserDto(
     string FirstName, string LastName,
     string Email, string Password,
     string? Phone, string? Company, string? City, string? Address,
-    UserRole Role, decimal GlobalDiscountRate, int? SalesRepresentativeId
+    UserRole Role, decimal GlobalDiscountRate, int? SalesRepresentativeId,
+    decimal CurrentBalance
 );
 
 public record CreatePaymentDto(

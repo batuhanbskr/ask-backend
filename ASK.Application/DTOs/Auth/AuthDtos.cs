@@ -34,5 +34,6 @@ public record AuthResponseDto(
     string AccessToken,
     string RefreshToken,
     DateTime AccessTokenExpiry,
+    decimal CurrentBalance,
     SalesRepresentativeDto? SalesRepresentative = null
 );

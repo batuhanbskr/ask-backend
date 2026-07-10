@@ -19,6 +19,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Address).HasMaxLength(500);
         builder.Property(u => u.City).HasMaxLength(100);
         builder.Property(u => u.Role).HasConversion<string>();
+        builder.Property(u => u.CurrentBalance).HasPrecision(18, 2).HasDefaultValue(0);
 
         // Email benzersiz index
         builder.HasIndex(u => u.Email).IsUnique();

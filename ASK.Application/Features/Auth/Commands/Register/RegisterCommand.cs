@@ -64,6 +64,7 @@ public class RegisterCommandHandler(
             user.Id, user.Email, user.FirstName, user.LastName,
             user.Role.ToString(), accessToken, refreshTokenValue,
             DateTime.UtcNow.AddHours(1),
+            user.CurrentBalance,
             null);
     }
 }

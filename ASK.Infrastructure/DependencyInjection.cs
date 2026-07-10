@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<ITamiPaymentService, TamiPaymentService>();
 
         // JWT ayarları
         services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
