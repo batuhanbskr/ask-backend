@@ -43,6 +43,9 @@ public class PaymentsController(
         // Construct backend callback URL dynamically
         var callbackUrl = $"{Request.Scheme}://{Request.Host}/api/payments/tami-callback";
 
+        // Extract client IP address
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+
         // Initiate payment on Tami gateway
         var result = await tamiPaymentService.Initiate3DPaymentAsync(
             userId,
@@ -53,6 +56,7 @@ public class PaymentsController(
             dto.ExpireYear,
             dto.Cvv,
             callbackUrl,
+            clientIp,
             ct);
 
         if (!result.Success)

@@ -46,6 +46,7 @@ public class TamiPaymentService : ITamiPaymentService
         int expireYear,
         string cvv,
         string callbackUrl,
+        string clientIp,
         CancellationToken ct)
     {
         var user = await _unitOfWork.Users.GetByIdAsync(userId, ct);
@@ -66,13 +67,15 @@ public class TamiPaymentService : ITamiPaymentService
             Cvv = cvv
         };
 
+        var finalIp = string.IsNullOrWhiteSpace(clientIp) || clientIp == "::1" ? "127.0.0.1" : clientIp;
+
         var buyerObj = new RequestBuyerBase
         {
             BuyerId = user.Id.ToString(),
             Name = user.FirstName,
             SurName = user.LastName,
             EmailAddress = user.Email,
-            IpAddress = "127.0.0.1",
+            IpAddress = finalIp,
             City = user.City ?? "Ankara",
             Country = "Türkiye",
             ZipCode = "06000",

@@ -27,6 +27,7 @@ public interface ITamiPaymentService
         int expireYear,
         string cvv,
         string callbackUrl,
+        string clientIp,
         CancellationToken ct);
 
     Task<Complete3DPaymentResultDto> Complete3DPaymentAsync(string orderId, CancellationToken ct);
