@@ -67,7 +67,22 @@ public class TamiPaymentService : ITamiPaymentService
             Cvv = cvv
         };
 
-        var finalIp = string.IsNullOrWhiteSpace(clientIp) || clientIp == "::1" ? "127.0.0.1" : clientIp;
+        var finalIp = "127.0.0.1";
+        if (!string.IsNullOrWhiteSpace(clientIp))
+        {
+            if (clientIp == "::1" || clientIp.Contains("127.0.0.1") || clientIp.Contains("0.0.0.1"))
+            {
+                finalIp = "127.0.0.1";
+            }
+            else if (clientIp.StartsWith("::ffff:"))
+            {
+                finalIp = clientIp.Substring(7);
+            }
+            else
+            {
+                finalIp = clientIp;
+            }
+        }
 
         var buyerObj = new RequestBuyerBase
         {
