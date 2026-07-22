@@ -1,9 +1,11 @@
+using ASK.Domain.Enums;
+
 namespace ASK.Domain.Entities;
 
 /// <summary>
 /// Sipariş kalemlerini temsil eder.
 /// Ürün fiyatı sipariş anında snapshot olarak saklanır,
-/// böylece sonraki fiyat değişiklikleri geçmiş siparişleri etkilemez.
+/// her kalemin kendi onay/iptal durumu ve tutar yansıması bulunur.
 /// </summary>
 public class OrderItem : BaseEntity
 {
@@ -17,6 +19,9 @@ public class OrderItem : BaseEntity
 
     /// <summary>Sipariş anındaki ürün adı snapshot'ı.</summary>
     public string ProductName { get; set; } = string.Empty;
+
+    /// <summary>Kalem onay/iptal durumu.</summary>
+    public OrderItemStatus Status { get; set; } = OrderItemStatus.Approved;
 
     // --- Navigation Properties ---
     public Order Order { get; set; } = null!;

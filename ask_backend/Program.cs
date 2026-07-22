@@ -182,10 +182,14 @@ try
             CONSTRAINT `FK_UserCategoryDiscounts_Categories_CategoryId` FOREIGN KEY (`CategoryId`) REFERENCES `Categories` (`Id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
+
+    await db.Database.ExecuteSqlRawAsync(@"
+        ALTER TABLE `OrderItems` ADD COLUMN `Status` INT NOT NULL DEFAULT 1;
+    ");
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"UserCategoryDiscounts table check: {ex.Message}");
+    Console.WriteLine($"DB Auto Schema Check: {ex.Message}");
 }
 
 if (app.Environment.IsDevelopment())

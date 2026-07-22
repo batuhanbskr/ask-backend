@@ -516,10 +516,12 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             o.Id, o.OrderNumber, o.Status,
             StatusLabel = GetOrderStatusLabel(o.Status),
             o.TotalAmount, o.ShippingAddress, o.Notes, o.CreatedAt,
-            CustomerName = o.User.FirstName + " " + o.User.LastName,
-            CustomerEmail = o.User.Email,
+            CustomerName = o.User != null ? o.User.FirstName + " " + o.User.LastName : "Müşteri",
+            CustomerEmail = o.User != null ? o.User.Email : "",
             Items = o.OrderItems.Select(i => new {
                 i.Id, i.ProductId, i.ProductName, i.Quantity, i.UnitPrice,
+                Status = (int)i.Status,
+                StatusLabel = GetOrderItemStatusLabel(i.Status),
                 LineTotal = i.Quantity * i.UnitPrice
             })
         });
@@ -533,6 +535,54 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         var result = await mediator.Send(new UpdateOrderStatusCommand(id, dto.Status), ct);
         return Ok(new { success = true, data = result });
     }
+
+    [HttpPatch("orders/items/{itemId:int}/status")]
+    public async Task<IActionResult> UpdateOrderItemStatus(int itemId, [FromBody] UpdateOrderItemStatusRequest request, CancellationToken ct)
+    {
+        var item = await db.OrderItems.Include(i => i.Order).ThenInclude(o => o.User).FirstOrDefaultAsync(i => i.Id == itemId, ct);
+        if (item is null) return NotFound(new { success = false, message = "Sipariş kalemi bulunamadı." });
+
+        var oldStatus = item.Status;
+        var newStatus = request.Status;
+
+        item.Status = newStatus;
+        item.UpdatedAt = DateTime.UtcNow;
+
+        var order = item.Order;
+        var allItems = await db.OrderItems.Where(i => i.OrderId == order.Id).ToListAsync(ct);
+
+        // Calculate total for active (Approved / Pending) items
+        var newTotalAmount = allItems
+            .Where(i => i.Status == ASK.Domain.Enums.OrderItemStatus.Approved || i.Status == ASK.Domain.Enums.OrderItemStatus.Pending)
+            .Sum(i => i.Quantity * i.UnitPrice);
+
+        var difference = newTotalAmount - order.TotalAmount;
+        order.TotalAmount = newTotalAmount;
+        order.UpdatedAt = DateTime.UtcNow;
+
+        if (order.Status != OrderStatus.Cancelled && order.User != null)
+        {
+            order.User.CurrentBalance += difference;
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        return Ok(new {
+            success = true,
+            message = $"Kalem durumu '{GetOrderItemStatusLabel(newStatus)}' olarak güncellendi.",
+            orderTotal = order.TotalAmount,
+            itemStatus = (int)newStatus,
+            itemStatusLabel = GetOrderItemStatusLabel(newStatus)
+        });
+    }
+
+    private static string GetOrderItemStatusLabel(ASK.Domain.Enums.OrderItemStatus status) => status switch
+    {
+        ASK.Domain.Enums.OrderItemStatus.Pending => "Beklemede",
+        ASK.Domain.Enums.OrderItemStatus.Approved => "Onaylandı",
+        ASK.Domain.Enums.OrderItemStatus.Cancelled => "İptal",
+        _ => "Onaylandı"
+    };
 
     [HttpDelete("orders/{id:int}")]
     public async Task<IActionResult> DeleteOrder(int id, CancellationToken ct)
@@ -847,3 +897,5 @@ public record BulkUpdateProductsDto(
     bool? StatusValue,
     string? Currency
 );
+
+public record UpdateOrderItemStatusRequest(ASK.Domain.Enums.OrderItemStatus Status);
