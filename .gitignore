@@ -25,3 +25,4 @@ Thumbs.db
 ## Local configurations containing credentials
 ask_backend/appsettings.json
 ask_backend/appsettings.Development.json
+publish
