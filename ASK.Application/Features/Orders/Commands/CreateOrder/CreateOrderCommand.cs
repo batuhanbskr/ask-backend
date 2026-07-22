@@ -49,7 +49,13 @@ public class CreateOrderCommandHandler(IUnitOfWork unitOfWork, IEmailService ema
         };
 
         var user = await unitOfWork.Users.GetByIdAsync(request.UserId, cancellationToken);
-        var globalDiscountRate = user?.GlobalDiscountRate ?? 0;
+        if (user is null)
+            throw new AppValidationException("Kullanıcı bulunamadı.");
+
+        if (!user.IsActive)
+            throw new AppValidationException("Hesabınız pasife alındığı için sipariş oluşturamazsınız. Lütfen yöneticiniz veya müşteri temsilciniz ile iletişime geçiniz.");
+
+        var globalDiscountRate = user.GlobalDiscountRate;
 
         decimal total = 0;
 

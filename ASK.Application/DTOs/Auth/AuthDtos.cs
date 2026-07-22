@@ -35,5 +35,6 @@ public record AuthResponseDto(
     string RefreshToken,
     DateTime AccessTokenExpiry,
     decimal CurrentBalance,
-    SalesRepresentativeDto? SalesRepresentative = null
+    SalesRepresentativeDto? SalesRepresentative = null,
+    bool IsActive = true
 );

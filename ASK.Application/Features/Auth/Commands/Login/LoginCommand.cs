@@ -25,8 +25,8 @@ public class LoginCommandHandler(
         if (user is null || !passwordHasher.Verify(request.Password, user.PasswordHash))
             throw new UnauthorizedException("Email veya şifre hatalı.");
 
-        if (!user.IsActive)
-            throw new UnauthorizedException("Hesabınız devre dışı bırakılmıştır.");
+        // Pasif kullanıcılar da sisteme giriş yapabilir, ürünleri inceleyip sepete ekleyebilir;
+        // ancak sipariş ve ödeme yapmaları engellenecektir.
 
         var accessToken = jwtTokenService.GenerateAccessToken(user);
         var refreshTokenValue = jwtTokenService.GenerateRefreshToken();
@@ -53,6 +53,7 @@ public class LoginCommandHandler(
                 user.SalesRepresentative.LastName,
                 user.SalesRepresentative.Email,
                 user.SalesRepresentative.Phone
-            ) : null);
+            ) : null,
+            user.IsActive);
     }
 }

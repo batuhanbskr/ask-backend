@@ -26,6 +26,12 @@ public class PaymentsController(
             return Unauthorized(new { success = false, message = "Giriş yapmanız gerekmektedir." });
         }
 
+        var user = await db.Users.FindAsync(new object[] { userId }, ct);
+        if (user is null || !user.IsActive)
+        {
+            return BadRequest(new { success = false, message = "Hesabınız pasife alındığı için ödeme işlemi gerçekleştiremezsiniz. Lütfen yöneticiniz ile iletişime geçiniz." });
+        }
+
         if (dto.Amount <= 0)
         {
             return BadRequest(new { success = false, message = "Ödeme tutarı 0'dan büyük olmalıdır." });
