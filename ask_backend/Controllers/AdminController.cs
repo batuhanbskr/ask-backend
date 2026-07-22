@@ -490,8 +490,25 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
     [HttpDelete("orders/{id:int}")]
     public async Task<IActionResult> DeleteOrder(int id, CancellationToken ct)
     {
-        var order = await db.Orders.Include(o => o.OrderItems).FirstOrDefaultAsync(o => o.Id == id, ct);
+        var order = await db.Orders.Include(o => o.OrderItems).Include(o => o.User).FirstOrDefaultAsync(o => o.Id == id, ct);
         if (order is null) return NotFound(new { success = false, message = "Sipariş bulunamadı." });
+
+        // İptal edilmemiş bir sipariş siliniyorsa, bakiyeyi iade et ve stokları geri ekle
+        if (order.Status != OrderStatus.Cancelled)
+        {
+            if (order.User != null)
+            {
+                order.User.CurrentBalance += order.TotalAmount;
+            }
+            foreach (var item in order.OrderItems)
+            {
+                var product = await db.Products.FindAsync([item.ProductId], ct);
+                if (product != null)
+                {
+                    product.Stock += item.Quantity;
+                }
+            }
+        }
 
         // Delete items explicitly
         if (order.OrderItems.Any())
@@ -502,31 +519,47 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         db.Orders.Remove(order);
         await db.SaveChangesAsync(ct);
 
-        return Ok(new { success = true, message = "Sipariş ve ilişkili tüm kayıtlar silindi." });
+        return Ok(new { success = true, message = "Sipariş ve ilişkili tüm kayıtlar silindi. Cari bakiye güncellendi." });
     }
 
     [HttpDelete("orders/{orderId:int}/items/{itemId:int}")]
     public async Task<IActionResult> DeleteOrderItem(int orderId, int itemId, CancellationToken ct)
     {
-        var order = await db.Orders.Include(o => o.OrderItems).FirstOrDefaultAsync(o => o.Id == orderId, ct);
+        var order = await db.Orders.Include(o => o.OrderItems).Include(o => o.User).FirstOrDefaultAsync(o => o.Id == orderId, ct);
         if (order is null) return NotFound(new { success = false, message = "Sipariş bulunamadı." });
 
         var item = order.OrderItems.FirstOrDefault(i => i.Id == itemId);
         if (item is null) return NotFound(new { success = false, message = "Sipariş kalemi bulunamadı." });
 
+        var itemTotal = item.Quantity * item.UnitPrice;
+
+        // Ürün stoğunu geri iade et
+        var product = await db.Products.FindAsync([item.ProductId], ct);
+        if (product != null)
+        {
+            product.Stock += item.Quantity;
+        }
+
         db.OrderItems.Remove(item);
         
-        // Recalculate order total amount (excluding the item we just removed)
+        // Sipariş toplam tutarını yeniden hesapla
         order.TotalAmount = order.OrderItems.Where(i => i.Id != itemId).Sum(i => i.Quantity * i.UnitPrice);
         order.UpdatedAt = DateTime.UtcNow;
+
+        // Sipariş iptal durumunda değilse, çıkarılan ürünün tutarını müşterinin cari bakiyesine iade et
+        if (order.Status != OrderStatus.Cancelled && order.User != null)
+        {
+            order.User.CurrentBalance += itemTotal;
+        }
 
         await db.SaveChangesAsync(ct);
 
         return Ok(new { 
             success = true, 
-            message = "Sipariş kalemi silindi ve sipariş tutarı güncellendi.",
+            message = "Sipariş kalemi silindi, stok iade edildi ve cari bakiye güncellendi.",
             data = new {
-                order.TotalAmount
+                order.TotalAmount,
+                UserBalance = order.User?.CurrentBalance
             }
         });
     }
