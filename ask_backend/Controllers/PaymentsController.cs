@@ -16,6 +16,42 @@ public class PaymentsController(
     ICurrentUserService currentUser,
     ITamiPaymentService tamiPaymentService) : ControllerBase
 {
+    /// <summary>Giriş yapmış müşterinin kendi geçmiş ödemelerini listeler.</summary>
+    [HttpGet]
+    [Authorize]
+    public async Task<IActionResult> GetMyPayments([FromQuery] int page = 1, [FromQuery] int limit = 20, CancellationToken ct = default)
+    {
+        var userId = currentUser.UserId ?? 0;
+        if (userId <= 0) return Unauthorized(new { success = false, message = "Giriş yapmanız gerekmektedir." });
+
+        limit = Math.Clamp(limit, 1, 100);
+        var query = db.Payments
+            .Where(p => p.UserId == userId)
+            .AsQueryable();
+
+        var total = await query.CountAsync(ct);
+        var payments = await query
+            .OrderByDescending(p => p.PaidAt)
+            .Skip((page - 1) * limit)
+            .Take(limit)
+            .Select(p => new
+            {
+                p.Id,
+                p.PaymentNumber,
+                p.Amount,
+                p.Method,
+                Status = (int)p.Status,
+                MethodLabel = GetPaymentMethodLabel(p.Method),
+                StatusLabel = GetPaymentStatusLabel(p.Status),
+                p.Description,
+                p.Reference,
+                p.PaidAt
+            })
+            .ToListAsync(ct);
+
+        return Ok(new { success = true, data = payments, total, page, limit });
+    }
+
     [HttpPost("pay-online")]
     [Authorize]
     public async Task<IActionResult> PayOnline([FromBody] PayOnlineDto dto, CancellationToken ct)
@@ -210,6 +246,25 @@ public class PaymentsController(
             return Redirect($"{b2bBaseUrl}/payment/fail?error={errorMsg}&orderId={orderId}");
         }
     }
+
+    private static string GetPaymentMethodLabel(PaymentMethod m) => m switch
+    {
+        PaymentMethod.Cash => "Nakit",
+        PaymentMethod.CreditCard => "Kredi Kartı",
+        PaymentMethod.VirtualPos => "Sanal POS",
+        PaymentMethod.BankTransfer => "Havale/EFT",
+        PaymentMethod.Check => "Çek",
+        _ => "Diğer"
+    };
+
+    private static string GetPaymentStatusLabel(PaymentStatus s) => s switch
+    {
+        PaymentStatus.Pending => "Beklemede",
+        PaymentStatus.Completed => "Tamamlandı",
+        PaymentStatus.Failed => "Başarısız",
+        PaymentStatus.Refunded => "İade Edildi",
+        _ => "Bilinmiyor"
+    };
 }
 
 public record PayOnlineDto(
