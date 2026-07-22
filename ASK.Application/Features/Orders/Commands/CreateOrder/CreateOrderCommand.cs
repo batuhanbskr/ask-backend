@@ -199,6 +199,60 @@ public class CreateOrderCommandHandler(IUnitOfWork unitOfWork, IEmailService ema
                         cancellationToken);
                 }
             }
+
+            // Customer Confirmation Email
+            if (user != null && !string.IsNullOrWhiteSpace(user.Email))
+            {
+                var customerEmailBody = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }}
+        .container {{ max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin: 0 auto; border: 1px solid #e2e8f0; }}
+        .header {{ background-color: #0f172a; color: #ffffff; padding: 25px 20px; text-align: center; border-bottom: 3px solid #f26522; }}
+        .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }}
+        .content {{ padding: 30px 25px; }}
+        .greet {{ font-size: 16px; font-weight: bold; margin-bottom: 15px; }}
+        .intro {{ font-size: 14px; line-height: 1.6; color: #475569; margin-bottom: 25px; }}
+        .details-box {{ background-color: #f1f5f9; border-radius: 8px; padding: 15px; margin-bottom: 25px; font-size: 13px; }}
+        .footer {{ background-color: #f8fafc; padding: 20px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>Siparişiniz Başarıyla Alındı</h1>
+        </div>
+        <div class='content'>
+            <div class='greet'>Sayın {user.FirstName} {user.LastName},</div>
+            <div class='intro'>
+                ASK B2B Portal üzerinden vermiş olduğunuz <strong>{order.OrderNumber}</strong> numaralı siparişiniz sistemimize başarıyla ulaşmıştır. En kısa sürede hazırlanarak tarafınıza sevk edilecektir.
+            </div>
+            
+            <div class='details-box'>
+                <div style='margin-bottom: 8px;'><strong>Sipariş No:</strong> <code style='background: #e2e8f0; padding: 2px 6px; border-radius: 4px;'>{order.OrderNumber}</code></div>
+                <div style='margin-bottom: 8px;'><strong>Tarih:</strong> {DateTime.UtcNow.AddHours(3):dd.MM.yyyy HH:mm}</div>
+                <div style='margin-bottom: 8px;'><strong>Toplam Tutar (KDV Dahil):</strong> <span style='font-size: 15px; font-weight: bold; color: #f26522;'>₺{order.TotalAmount:N2}</span></div>
+                <div style='margin-bottom: 8px;'><strong>Teslimat Adresi:</strong> {order.ShippingAddress}</div>
+            </div>
+        </div>
+        <div class='footer'>
+            ASK Teknik Hırdavat Ltd. Şti. — info@askteknikhirdavat.com<br>
+            Bu e-posta otomatik olarak gönderilmiştir.
+        </div>
+    </div>
+</body>
+</html>";
+
+                await emailService.SendEmailAsync(
+                    user.Email,
+                    $"[ASK B2B] Siparişiniz Alındı - No: {order.OrderNumber}",
+                    customerEmailBody,
+                    isHtml: true,
+                    cancellationToken);
+            }
         }
         catch (Exception)
         {

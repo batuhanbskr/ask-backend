@@ -20,8 +20,11 @@ public class UpdateOrderStatusCommandHandler(IUnitOfWork unitOfWork)
 
         var user = await unitOfWork.Users.GetByIdAsync(order.UserId, cancellationToken);
 
-        // 1. Sipariş İPTAL edildiğinde: Stoklar geri eklenir ve harcanan tutar cari bakiyeye iade edilir.
-        if (request.Status == OrderStatus.Cancelled && order.Status != OrderStatus.Cancelled)
+        var isOldCancelledOrReturned = order.Status == OrderStatus.Cancelled || order.Status == OrderStatus.Returned;
+        var isNewCancelledOrReturned = request.Status == OrderStatus.Cancelled || request.Status == OrderStatus.Returned;
+
+        // 1. Sipariş İPTAL veya İADE edildiğinde: Stoklar geri eklenir ve harcanan tutar cari bakiyeye iade edilir.
+        if (isNewCancelledOrReturned && !isOldCancelledOrReturned)
         {
             foreach (var item in order.OrderItems)
             {
@@ -39,8 +42,8 @@ public class UpdateOrderStatusCommandHandler(IUnitOfWork unitOfWork)
                 unitOfWork.Users.Update(user);
             }
         }
-        // 2. İptal durumundaki sipariş tekrar AKTİF (Beklemede/Onaylandı vb.) yapıldığında: Stoklar düşülür ve tutar bakiyeden tekrar düşülür.
-        else if (order.Status == OrderStatus.Cancelled && request.Status != OrderStatus.Cancelled)
+        // 2. İptal/İade durumundaki sipariş tekrar AKTİF yapıldığında: Stoklar düşülür ve tutar bakiyeden tekrar düşülür.
+        else if (isOldCancelledOrReturned && !isNewCancelledOrReturned)
         {
             foreach (var item in order.OrderItems)
             {

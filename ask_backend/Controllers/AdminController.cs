@@ -59,8 +59,9 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         var totalUsers     = await usersQuery.CountAsync(ct);
         var totalOrders    = await ordersQuery.CountAsync(ct);
         var pendingOrders  = await ordersQuery.CountAsync(o => o.Status == OrderStatus.Pending, ct);
+        var pendingReturnRequests = await ordersQuery.CountAsync(o => o.Status == OrderStatus.ReturnRequested, ct);
         var totalRevenue   = await ordersQuery
-            .Where(o => o.Status != OrderStatus.Cancelled)
+            .Where(o => o.Status != OrderStatus.Cancelled && o.Status != OrderStatus.Returned)
             .SumAsync(o => o.TotalAmount, ct);
         var totalPayments  = await paymentsQuery.SumAsync(p => p.Amount, ct);
         
@@ -82,7 +83,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             .ToListAsync(ct);
 
         return Ok(new { success = true, data = new {
-            totalProducts, totalUsers, totalOrders, pendingOrders,
+            totalProducts, totalUsers, totalOrders, pendingOrders, pendingReturnRequests,
             totalRevenue, totalPayments, recentOrders, lowStock
         }});
     }
