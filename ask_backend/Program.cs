@@ -165,9 +165,32 @@ app.MapControllers();
 // ────────────────────────────────────────────────────
 using var scope = app.Services.CreateScope();
 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+try
+{
+    await db.Database.ExecuteSqlRawAsync(@"
+        CREATE TABLE IF NOT EXISTS `UserCategoryDiscounts` (
+            `Id` INT NOT NULL AUTO_INCREMENT,
+            `UserId` INT NOT NULL,
+            `CategoryId` INT NOT NULL,
+            `DiscountRate` DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+            `CreatedAt` DATETIME(6) NOT NULL,
+            `UpdatedAt` DATETIME(6) NOT NULL,
+            PRIMARY KEY (`Id`),
+            KEY `IX_UserCategoryDiscounts_UserId` (`UserId`),
+            KEY `IX_UserCategoryDiscounts_CategoryId` (`CategoryId`),
+            CONSTRAINT `FK_UserCategoryDiscounts_Users_UserId` FOREIGN KEY (`UserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE,
+            CONSTRAINT `FK_UserCategoryDiscounts_Categories_CategoryId` FOREIGN KEY (`CategoryId`) REFERENCES `Categories` (`Id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"UserCategoryDiscounts table check: {ex.Message}");
+}
+
 if (app.Environment.IsDevelopment())
 {
-    await db.Database.MigrateAsync();
+    try { await db.Database.MigrateAsync(); } catch {}
 }
 
 // Database migrations completed.

@@ -21,6 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ContactMessage> ContactMessages => Set<ContactMessage>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<UserCategoryDiscount> UserCategoryDiscounts => Set<UserCategoryDiscount>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

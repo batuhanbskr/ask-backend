@@ -41,4 +41,5 @@ public class User : BaseEntity
     public Cart? Cart { get; set; }
     public ICollection<RefreshToken> RefreshTokens { get; set; } = [];
     public ICollection<User> Clients { get; set; } = [];
+    public ICollection<UserCategoryDiscount> CategoryDiscounts { get; set; } = [];
 }

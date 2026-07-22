@@ -30,17 +30,37 @@ public class GetProductsQueryHandler(IUnitOfWork unitOfWork, ICurrentUserService
             request.CategoryId, request.BrandId, request.IsNew, request.IsFeatured, request.IsDealOfTheDay, request.InStockOnly,
             request.Search, request.Page, request.Limit, request.ActiveOnly, cancellationToken);
 
-        decimal discountRate = 0;
+        List<Domain.Entities.UserCategoryDiscount> categoryDiscounts = [];
+        decimal globalDiscountRate = 0;
+
         if (currentUser.IsAuthenticated && currentUser.UserId.HasValue)
         {
             var user = await unitOfWork.Users.GetByIdAsync(currentUser.UserId.Value, cancellationToken);
             if (user != null)
             {
-                discountRate = user.GlobalDiscountRate;
+                globalDiscountRate = user.GlobalDiscountRate;
+                categoryDiscounts = user.CategoryDiscounts?.ToList() ?? [];
             }
         }
 
-        var dtos = items.Select(p => MapToDto(p, discountRate)).ToList();
+        var dtos = items.Select(p => {
+            decimal rate = globalDiscountRate;
+            var catDisc = categoryDiscounts.FirstOrDefault(cd => cd.CategoryId == p.CategoryId);
+            if (catDisc != null && catDisc.DiscountRate > 0)
+            {
+                rate = catDisc.DiscountRate;
+            }
+            else if (p.Category != null && p.Category.ParentCategoryId.HasValue)
+            {
+                var parentDisc = categoryDiscounts.FirstOrDefault(cd => cd.CategoryId == p.Category.ParentCategoryId.Value);
+                if (parentDisc != null && parentDisc.DiscountRate > 0)
+                {
+                    rate = parentDisc.DiscountRate;
+                }
+            }
+            return MapToDto(p, rate);
+        }).ToList();
+
         return PaginatedResponse<ProductDto>.Ok(dtos, total, request.Page, request.Limit);
     }
 

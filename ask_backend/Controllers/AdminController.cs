@@ -304,6 +304,7 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             .Select(u => new {
                 u.Id, u.FirstName, u.LastName, u.Email, u.Phone,
                 u.Company, u.City, u.Role, u.IsActive, u.GlobalDiscountRate, u.CurrentBalance, u.CreatedAt,
+                CategoryDiscountCount = u.CategoryDiscounts.Count,
                 SalesRepresentativeId = u.SalesRepresentativeId,
                 SalesRepresentativeName = u.SalesRepresentative != null ? u.SalesRepresentative.FirstName + " " + u.SalesRepresentative.LastName : null
             })
@@ -318,24 +319,31 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         var currentUserId = currentUser.UserId ?? 0;
         var isSuperAdmin = currentUser.Role == "SuperAdmin";
 
-        var query = db.Users.Where(u => u.Id == id);
+        var query = db.Users
+            .Include(u => u.CategoryDiscounts)
+                .ThenInclude(cd => cd.Category)
+            .Where(u => u.Id == id);
 
         if (!isSuperAdmin)
         {
             query = query.Where(u => u.SalesRepresentativeId == currentUserId);
         }
 
-        var user = await query
-            .Select(u => new {
-                u.Id, u.FirstName, u.LastName, u.Email, u.Phone,
-                u.Company, u.Address, u.City, u.Role, u.IsActive, u.GlobalDiscountRate, u.CurrentBalance, u.CreatedAt,
-                SalesRepresentativeId = u.SalesRepresentativeId,
-                OrderCount = u.Orders.Count
-            })
-            .FirstOrDefaultAsync(ct);
+        var user = await query.FirstOrDefaultAsync(ct);
 
         if (user is null) return NotFound(new { success = false, message = "Kullanıcı bulunamadı veya yetkiniz yok." });
-        return Ok(new { success = true, data = user });
+        return Ok(new { success = true, data = new {
+            user.Id, user.FirstName, user.LastName, user.Email, user.Phone,
+            user.Company, user.Address, user.City, user.Role, user.IsActive,
+            user.GlobalDiscountRate, user.CurrentBalance, user.CreatedAt,
+            SalesRepresentativeId = user.SalesRepresentativeId,
+            OrderCount = user.Orders.Count,
+            CategoryDiscounts = user.CategoryDiscounts.Select(cd => new {
+                cd.CategoryId,
+                CategoryName = cd.Category != null ? cd.Category.Name : null,
+                cd.DiscountRate
+            }).ToList()
+        }});
     }
 
     [HttpPut("users/{id:int}")]
@@ -362,6 +370,28 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
         user.SalesRepresentativeId = dto.SalesRepresentativeId;
         user.CurrentBalance = dto.CurrentBalance;
         user.UpdatedAt = DateTime.UtcNow;
+
+        // Update category discounts
+        var existingDiscounts = await db.UserCategoryDiscounts.Where(cd => cd.UserId == id).ToListAsync(ct);
+        db.UserCategoryDiscounts.RemoveRange(existingDiscounts);
+
+        if (dto.CategoryDiscounts != null && dto.CategoryDiscounts.Count > 0)
+        {
+            foreach (var item in dto.CategoryDiscounts)
+            {
+                if (item.CategoryId > 0 && item.DiscountRate > 0)
+                {
+                    db.UserCategoryDiscounts.Add(new UserCategoryDiscount
+                    {
+                        UserId = id,
+                        CategoryId = item.CategoryId,
+                        DiscountRate = Math.Clamp(item.DiscountRate, 0, 100),
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+        }
 
         await db.SaveChangesAsync(ct);
         return Ok(new { success = true, message = "Kullanıcı güncellendi." });
@@ -415,6 +445,23 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+
+        if (dto.CategoryDiscounts != null && dto.CategoryDiscounts.Count > 0)
+        {
+            foreach (var item in dto.CategoryDiscounts)
+            {
+                if (item.CategoryId > 0 && item.DiscountRate > 0)
+                {
+                    user.CategoryDiscounts.Add(new UserCategoryDiscount
+                    {
+                        CategoryId = item.CategoryId,
+                        DiscountRate = Math.Clamp(item.DiscountRate, 0, 100),
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+        }
 
         db.Users.Add(user);
 
@@ -761,11 +808,14 @@ public class AdminController(IMediator mediator, AppDbContext db, ICurrentUserSe
 
 // ─── DTOs (yalnızca Admin'e özel) ─────────────────────────────────────────────
 
+public record UserCategoryDiscountItemDto(int CategoryId, string? CategoryName, decimal DiscountRate);
+
 public record AdminUpdateUserDto(
     string FirstName, string LastName,
     string? Phone, string? Company, string? City, string? Address,
     UserRole Role, bool IsActive, decimal GlobalDiscountRate, int? SalesRepresentativeId,
-    decimal CurrentBalance
+    decimal CurrentBalance,
+    List<UserCategoryDiscountItemDto>? CategoryDiscounts
 );
 
 public record AdminCreateUserDto(
@@ -773,7 +823,8 @@ public record AdminCreateUserDto(
     string Email, string Password,
     string? Phone, string? Company, string? City, string? Address,
     UserRole Role, decimal GlobalDiscountRate, int? SalesRepresentativeId,
-    decimal CurrentBalance
+    decimal CurrentBalance,
+    List<UserCategoryDiscountItemDto>? CategoryDiscounts
 );
 
 public record CreatePaymentDto(
